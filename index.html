@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sip Check">
+<title>Sip Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --lake: #0E3B5C; --water: #3FA7D6; --mist: #EAF5FB; --glass: #FFFFFF;
+    --pebble: #5E6E79; --ok: #1F8A5B; --warn: #B4542C;
+    --bg: var(--mist); --ink: var(--lake); --card: var(--glass);
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #081C2B; --ink: #DCEFF9; --card: #0F2A3F; --pebble: #8FA3B0; }
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "Bricolage Grotesque", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  main { max-width: 420px; margin: 0 auto; padding: 20px 22px 40px; }
+  h1 { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.02em; margin: 8px 0 0; }
+  .sub { color: var(--pebble); margin: 4px 0 18px; }
+
+  .glass-wrap { display: flex; align-items: flex-end; gap: 18px; margin: 10px 0 22px; }
+  svg.glass { width: 130px; height: 170px; flex: none; }
+  .count { font-size: 3.6rem; font-weight: 800; line-height: 1; }
+  .count small { font-size: 1.2rem; color: var(--pebble); font-weight: 500; }
+  #water { transition: y .8s ease, height .8s ease; }
+
+  .snap {
+    display: block; text-align: center; background: var(--water); color: #fff;
+    font-size: 1.25rem; font-weight: 800; padding: 18px; border-radius: 999px;
+    cursor: pointer; user-select: none;
+  }
+  .snap.off { opacity: .45; pointer-events: none; }
+  .snap:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; }
+  #result { min-height: 1.5em; margin: 14px 4px; font-weight: 500; }
+  #result.ok { color: var(--ok); } #result.no { color: var(--warn); }
+  #preview { width: 100%; border-radius: 14px; display: none; margin-bottom: 8px; }
+
+  .stats { display: flex; gap: 12px; margin: 8px 0 20px; }
+  .stats div { flex: 1; background: var(--card); border-radius: 14px; padding: 14px; }
+  .stats b { display: block; font-size: 1.5rem; }
+  .stats span { color: var(--pebble); font-size: .9rem; }
+
+  ul { list-style: none; padding: 0; margin: 0 0 20px; color: var(--pebble); }
+  li { padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--pebble) 25%, transparent); }
+  details { background: var(--card); border-radius: 14px; padding: 12px 14px; }
+  summary { cursor: pointer; font-weight: 500; }
+  label.row { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+  input[type=number] { width: 70px; font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--pebble); background: transparent; color: var(--ink); }
+  button.link { background: none; border: 0; color: var(--warn); font: inherit; padding: 12px 0 0; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sip Check</h1>
+  <p class="sub" id="date"></p>
+
+  <div class="glass-wrap">
+    <svg class="glass" viewBox="0 0 130 170" aria-hidden="true">
+      <defs><clipPath id="cup"><path d="M12 8 H118 L104 162 H26 Z"/></clipPath></defs>
+      <rect id="water" x="0" y="170" width="130" height="0" fill="var(--water)" clip-path="url(#cup)"/>
+      <path d="M12 8 H118 L104 162 H26 Z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <div class="count"><span id="today">0</span><small> / <span id="goalShow">8</span></small></div>
+      <div class="sub" style="margin:6px 0 0">glasses today</div>
+    </div>
+  </div>
+
+  <img id="preview" alt="Your last photo">
+  <label class="snap off" id="snap">
+    <span id="snapText">Getting the camera check ready</span>
+    <input type="file" accept="image/*" capture="environment" id="cam" hidden>
+  </label>
+  <p id="result" role="status"></p>
+
+  <div class="stats">
+    <div><b id="streak">0</b><span>day streak</span></div>
+    <div><b id="last">None yet</b><span>last glass</span></div>
+  </div>
+
+  <ul id="log"></ul>
+
+  <details>
+    <summary>Settings</summary>
+    <label class="row">Daily goal (glasses)
+      <input type="number" id="goal" min="1" max="20">
+    </label>
+    <button class="link" id="undo">Remove last glass</button>
+  </details>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script>
+// ===== EDIT THESE =====
+const NTFY_TOPIC = "sipcheck-romaan-k82mz"; // make this random, it works like a password
+const FRIEND_NAME = "Saira";                       // shows up in your notification
+const SEND_PHOTO = true;                        // false = text only, no photo attached
+// ======================
+
+const KEY = "sipcheck.v1";
+const WATERY = ["cup", "bottle", "wine glass"]; // things the model can spot
+const $ = id => document.getElementById(id);
+
+let state = load();
+let model = null;
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || { goal: 8, log: [] }; }
+  catch { return { goal: 8, log: [] }; }
+}
+function save() {
+  const cutoff = Date.now() - 60 * 864e5; // keep 60 days
+  state.log = state.log.filter(t => t > cutoff);
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+}
+
+const dayKey = t => new Date(t).toLocaleDateString("en-CA");
+const timeStr = t => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const todays = () => state.log.filter(t => dayKey(t) === dayKey(Date.now()));
+
+function streak() {
+  const counts = {};
+  state.log.forEach(t => { const k = dayKey(t); counts[k] = (counts[k] || 0) + 1; });
+  const d = new Date();
+  if ((counts[dayKey(d)] || 0) < state.goal) d.setDate(d.getDate() - 1); // today still in progress
+  let s = 0;
+  while ((counts[dayKey(d)] || 0) >= state.goal) { s++; d.setDate(d.getDate() - 1); }
+  return s;
+}
+
+function render() {
+  const t = todays();
+  $("date").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+  $("today").textContent = t.length;
+  $("goalShow").textContent = state.goal;
+  $("goal").value = state.goal;
+  $("streak").textContent = streak();
+  $("last").textContent = t.length ? timeStr(t[t.length - 1]) : "None yet";
+  $("log").innerHTML = t.slice().reverse().map(x => `<li>Glass at ${timeStr(x)}</li>`).join("");
+
+  const fill = Math.min(t.length / state.goal, 1) * 154; // 154 = inside height of the glass
+  $("water").setAttribute("y", 162 - fill);
+  $("water").setAttribute("height", fill);
+}
+
+function shrink(img, max = 640) {
+  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.naturalWidth * scale);
+  c.height = Math.round(img.naturalHeight * scale);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+
+async function notify(canvas) {
+  const n = todays().length;
+  const headers = {
+    "Title": "Sip Check",
+    "Message": `${FRIEND_NAME} logged glass ${n} of ${state.goal} at ${timeStr(Date.now())}`,
+    "Tags": "droplet"
+  };
+  try {
+    if (SEND_PHOTO) {
+      const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.7));
+      headers["Filename"] = "water.jpg";
+      await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, { method: "PUT", body: blob, headers });
+    } else {
+      await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, { method: "POST", body: headers.Message, headers: { Title: headers.Title, Tags: headers.Tags } });
+    }
+  } catch { /* no signal? the glass still counts */ }
+}
+
+$("cam").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file || !model) return;
+
+  const img = $("preview");
+  img.src = URL.createObjectURL(file);
+  img.style.display = "block";
+  $("result").className = "";
+  $("result").textContent = "Checking your photo";
+
+  try {
+    await img.decode();
+    const small = shrink(img);
+    const preds = await model.detect(small);
+    const hit = preds.find(p => WATERY.includes(p.class) && p.score > 0.4);
+    if (hit) {
+      state.log.push(Date.now());
+      save(); render();
+      notify(small);
+      $("result").className = "ok";
+      $("result").textContent = `Logged. Spotted a ${hit.class}. 💧`;
+    } else {
+      $("result").className = "no";
+      $("result").textContent = "No cup, glass or bottle spotted. Hold it closer and snap again.";
+    }
+  } catch {
+    $("result").className = "no";
+    $("result").textContent = "That photo couldn't be read. Snap again.";
+  }
+});
+
+$("goal").addEventListener("change", e => {
+  state.goal = Math.max(1, Math.min(20, parseInt(e.target.value) || 8));
+  save(); render();
+});
+$("undo").addEventListener("click", () => {
+  if (!todays().length) return;
+  state.log.pop(); save(); render();
+});
+
+render();
+cocoSsd.load({ base: "lite_mobilenet_v2" })
+  .then(m => {
+    model = m;
+    $("snap").classList.remove("off");
+    $("snapText").textContent = "📸 Snap your water";
+  })
+  .catch(() => {
+    $("snapText").textContent = "Camera check needs internet. Reopen the app.";
+  });
+</script>
+</body>
+</html>
