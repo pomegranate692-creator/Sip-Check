@@ -110,34 +110,55 @@
   input[type=number] { width: 70px; font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--pebble); background: transparent; color: var(--ink); }
   button.link { background: none; border: 0; color: var(--warn); font: inherit; padding: 12px 0 0; cursor: pointer; }
 
-  /* ===== opening splash ===== */
+  /* ===== opening splash =====
+     Everything waits in its start position until JS adds .go (after fonts load),
+     and every element runs only ONE transform animation so nothing fights. */
   #splash { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: linear-gradient(180deg, #5BB8E2, #2F8FC0 70%, #1F6F9E); color: #fff; overflow: hidden; cursor: pointer;
-    transition: transform .55s cubic-bezier(.6,0,.4,1), opacity .55s; }
-  #splash.bye { transform: translateY(-100%); opacity: .6; }
+    font-family: "Bricolage Grotesque", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    will-change: transform, opacity; transition: transform .6s cubic-bezier(.65,0,.35,1), opacity .6s ease; }
+  #splash.bye { transform: translate3d(0, -100%, 0); opacity: 0; }
   .sp-stage { position: relative; width: 160px; height: 190px; }
-  .sp-drop { position: absolute; left: 20px; bottom: 0; width: 120px; transform-origin: 50% 100%;
-    animation: spFall .7s cubic-bezier(.5,0,.9,.6) both, spSquash .5s .7s ease-out both, spBob 1.6s 1.2s ease-in-out infinite; }
-  .sp-ring { position: absolute; left: 50%; bottom: -6px; width: 150px; height: 34px; margin-left: -75px; border: 3px solid #fff; border-radius: 50%;
-    opacity: 0; animation: spRing .9s .68s ease-out both; }
-  .sp-ring.r2 { animation-delay: .85s; }
-  .sp-dot { position: absolute; left: 50%; bottom: 10px; width: 10px; height: 10px; margin-left: -5px; background: #fff; border-radius: 50%;
-    opacity: 0; animation: spSpray .7s .7s ease-out both; }
+  .sp-fall, .sp-squash, .sp-drop, .sp-ring, .sp-dot, .sp-title, .sp-slogan, .sp-hello, .sp-waves, .sp-wave { will-change: transform, opacity; }
+  .sp-fall { position: absolute; left: 20px; bottom: 0; width: 120px; transform: translate3d(0, -85vh, 0); }
+  .sp-squash { transform-origin: 50% 100%; }
+  .sp-drop { display: block; width: 120px; }
+  .sp-ring { position: absolute; left: 50%; bottom: -6px; width: 150px; height: 34px; margin-left: -75px; border: 3px solid #fff; border-radius: 50%; opacity: 0; }
+  .sp-dot { position: absolute; left: 50%; bottom: 10px; width: 10px; height: 10px; margin-left: -5px; background: #fff; border-radius: 50%; opacity: 0; }
   .d1 { --x: -70px; --y: -60px; } .d2 { --x: -40px; --y: -90px; } .d3 { --x: 45px; --y: -85px; } .d4 { --x: 75px; --y: -55px; }
-  .sp-title { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.02em; margin: 34px 0 4px; animation: spPop .5s 1s cubic-bezier(.3,1.6,.5,1) both; }
-  .sp-slogan { font-size: 1.35rem; font-weight: 500; margin: 0; animation: spRise .5s 1.25s ease-out both; }
-  .sp-hello { font-size: 1rem; opacity: .85; margin: 14px 0 0; animation: spRise .5s 1.45s ease-out both; }
-  .sp-wave { position: absolute; left: 0; bottom: 0; width: 200%; height: 22vh; animation: spWave 3s linear infinite, spRiseWave 1.2s ease-out both; }
-  @keyframes spFall { from { transform: translateY(-80vh) scale(.9, 1.15); } to { transform: translateY(0) scale(1); } }
-  @keyframes spSquash { 0% { transform: scale(1.35, .65); } 45% { transform: scale(.88, 1.14) translateY(-18px); } 100% { transform: scale(1); } }
-  @keyframes spBob { 50% { transform: translateY(-10px); } }
+  .sp-title { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.02em; margin: 34px 0 4px; opacity: 0; }
+  .sp-slogan { font-size: 1.35rem; font-weight: 500; margin: 0; opacity: 0; }
+  .sp-hello { font-size: 1rem; margin: 14px 0 0; opacity: 0; }
+  .sp-waves { position: absolute; left: 0; right: 0; bottom: 0; height: 22vh; overflow: hidden; transform: translate3d(0, 100%, 0); }
+  .sp-wave { position: absolute; left: 0; bottom: 0; width: 200%; height: 100%; }
+
+  .go .sp-fall   { animation: spFall .75s cubic-bezier(.55,0,.85,.55) forwards; }
+  .go .sp-squash { animation: spSquash .6s .75s cubic-bezier(.3,1.4,.5,1) both; }
+  .go .sp-drop   { animation: spBob 2s 1.4s ease-in-out infinite; }
+  .go .sp-ring   { animation: spRing 1s .72s cubic-bezier(.2,.7,.3,1) forwards; }
+  .go .sp-ring.r2 { animation-delay: .9s; }
+  .go .sp-dot    { animation: spSpray .75s .74s cubic-bezier(.2,.7,.3,1) forwards; }
+  .go .sp-title  { animation: spPop .6s 1s cubic-bezier(.3,1.5,.5,1) both; }
+  .go .sp-slogan { animation: spRise .6s 1.2s cubic-bezier(.2,.7,.3,1) both; }
+  .go .sp-hello  { animation: spRiseSoft .6s 1.4s cubic-bezier(.2,.7,.3,1) both; }
+  .go .sp-waves  { animation: spWavesIn 1s cubic-bezier(.2,.7,.3,1) forwards; }
+  .go .sp-wave   { animation: spWave 4s linear infinite; }
+
+  @keyframes spFall { to { transform: translate3d(0, 0, 0); } }
+  @keyframes spSquash { 0% { transform: scale(1, 1); } 15% { transform: scale(1.3, .72); } 55% { transform: translate3d(0, -16px, 0) scale(.92, 1.08); } 100% { transform: scale(1, 1); } }
+  @keyframes spBob { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -8px, 0); } }
   @keyframes spRing { from { opacity: .9; transform: scale(.3); } to { opacity: 0; transform: scale(1.5); } }
-  @keyframes spSpray { 0% { opacity: 1; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(var(--x), var(--y)); } }
-  @keyframes spPop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
-  @keyframes spRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-  @keyframes spWave { to { transform: translateX(-50%); } }
-  @keyframes spRiseWave { from { bottom: -22vh; } to { bottom: 0; } }
-  @media (prefers-reduced-motion: reduce) { #splash *, #splash { animation: none !important; transition: opacity .3s !important; } #splash.bye { transform: none; opacity: 0; } }
+  @keyframes spSpray { from { opacity: 1; transform: translate3d(0, 0, 0); } to { opacity: 0; transform: translate3d(var(--x), var(--y), 0); } }
+  @keyframes spPop { from { opacity: 0; transform: scale(.5); } to { opacity: 1; transform: scale(1); } }
+  @keyframes spRise { from { opacity: 0; transform: translate3d(0, 14px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+  @keyframes spRiseSoft { from { opacity: 0; transform: translate3d(0, 14px, 0); } to { opacity: .85; transform: translate3d(0, 0, 0); } }
+  @keyframes spWavesIn { to { transform: translate3d(0, 0, 0); } }
+  @keyframes spWave { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-50%, 0, 0); } }
+  @media (prefers-reduced-motion: reduce) {
+    #splash *, #splash { animation: none !important; }
+    .sp-fall, .sp-waves { transform: none; } .sp-title, .sp-slogan, .sp-hello { opacity: 1; }
+    #splash { transition: opacity .4s !important; } #splash.bye { transform: none; }
+  }
 </style>
 </head>
 <body>
@@ -145,22 +166,22 @@
   <div class="sp-stage">
     <div class="sp-ring r1"></div><div class="sp-ring r2"></div>
     <i class="sp-dot d1"></i><i class="sp-dot d2"></i><i class="sp-dot d3"></i><i class="sp-dot d4"></i>
-    <svg class="sp-drop" viewBox="0 0 120 150">
+    <div class="sp-fall"><div class="sp-squash"><svg class="sp-drop" viewBox="0 0 120 150">
       <path d="M60 8 C60 8 14 66 14 98 a46 46 0 0 0 92 0 C106 66 60 8 60 8Z" fill="#fff" stroke="#0E3B5C" stroke-width="4"/>
       <ellipse cx="36" cy="80" rx="7" ry="14" fill="#3FA7D6" opacity=".35"/>
       <circle cx="44" cy="98" r="6" fill="#0E3B5C"/><circle cx="76" cy="98" r="6" fill="#0E3B5C"/>
       <circle cx="46" cy="96" r="2" fill="#fff"/><circle cx="78" cy="96" r="2" fill="#fff"/>
       <circle cx="34" cy="116" r="6" fill="#FF8FAB" opacity=".7"/><circle cx="86" cy="116" r="6" fill="#FF8FAB" opacity=".7"/>
       <path d="M46 116 Q60 132 74 116" fill="none" stroke="#0E3B5C" stroke-width="4" stroke-linecap="round"/>
-    </svg>
+    </svg></div></div>
   </div>
   <h1 class="sp-title">Sip Check</h1>
   <p class="sp-slogan">Sip happens 💧</p>
   <p class="sp-hello" id="spHello"></p>
-  <svg class="sp-wave" viewBox="0 0 1200 120" preserveAspectRatio="none">
+  <div class="sp-waves"><svg class="sp-wave" viewBox="0 0 1200 120" preserveAspectRatio="none">
     <path d="M0 60 Q150 20 300 60 T600 60 T900 60 T1200 60 V120 H0Z" fill="#fff" opacity=".25"/>
     <path d="M0 75 Q150 40 300 75 T600 75 T900 75 T1200 75 V120 H0Z" fill="#fff" opacity=".45"/>
-  </svg>
+  </svg></div>
 </div>
 <main>
   <h1>Sip Check</h1>
@@ -738,29 +759,34 @@ $("undo").addEventListener("click", () => {
 });
 
 render();
-renderHistory();
 setupReminderSettings();
 setInterval(showNext, 60000);
 $("pushBtn").addEventListener("click", enablePush);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 showPushUI();
-refreshPush();
+function afterSplash() { renderHistory(); refreshPush(); }
 
 // ===== opening splash =====
 (function splash() {
   const sp = $("splash");
   const h = new Date().getHours();
-  const hi = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-  const emoji = h < 12 ? "☀️" : h < 17 ? "🌤️" : "🌙";
-  $("spHello").textContent = `${hi} ${emoji}`;
+  $("spHello").textContent = h < 12 ? "Good morning ☀️" : h < 17 ? "Good afternoon 🌤️" : "Good evening 🌙";
   let gone = false;
   const bye = () => {
     if (gone) return; gone = true;
     sp.classList.add("bye");
-    setTimeout(() => sp.remove(), 600);
+    setTimeout(() => { sp.remove(); afterSplash(); }, 650);
   };
   sp.addEventListener("click", bye);
-  setTimeout(bye, 2900);
+
+  // wait for the font (max 600ms) so text doesn't jump mid animation, then start on a fresh frame
+  const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
+  Promise.race([fontsReady, new Promise(r => setTimeout(r, 600))]).then(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      sp.classList.add("go");
+      setTimeout(bye, 2900);
+    }));
+  });
 })();
 </script>
 </body>
