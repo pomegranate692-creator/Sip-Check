@@ -54,9 +54,6 @@
   #result.ok { color: var(--ok); } #result.no { color: var(--warn); }
   #preview { width: 100%; border-radius: 14px; display: block; margin-bottom: 12px; }
   button.snap { width: 100%; border: 0; font-family: inherit; }
-  button.snap:disabled { opacity: .4; }
-  #check { text-align: center; font-weight: 500; margin: 0 0 12px; min-height: 1.4em; }
-  #check.ok { color: var(--ok); } #check.no { color: var(--warn); }
 
   .stats { display: flex; gap: 12px; margin: 8px 0 20px; }
   .stats div { flex: 1; background: var(--card); border-radius: 14px; padding: 14px; }
@@ -125,7 +122,6 @@
 
   <div id="review" hidden>
     <img id="preview" alt="Your photo">
-    <p id="check" role="status"></p>
     <button class="snap" id="send">Send it 💧</button>
     <label class="snap alt">
       Retake
@@ -181,8 +177,6 @@
   </details>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <script>
 // ===== EDIT THESE =====
 const NTFY_TOPIC = "sipcheck-romaan-k82mz"; // make this random, it works like a password
@@ -566,21 +560,6 @@ async function renderHistory() {
 }
 $("viewer").addEventListener("click", () => $("viewer").hidden = true);
 
-// ===== drink check (runs on her phone, photo never leaves for this) =====
-// COCO objects that hold something to drink. A Hydro Flask usually reads as "bottle", "cup" or "vase".
-const DRINK_LABELS = { "bottle": "bottle", "cup": "cup", "wine glass": "glass", "vase": "bottle" };
-const MIN_SCORE = 0.25;
-let model = null;
-const modelReady = cocoSsd.load({ base: "mobilenet_v2" }).then(m => (model = m)).catch(() => null);
-
-async function findDrink(canvas) {
-  const m = model || await modelReady;
-  if (!m) return { error: true };
-  const preds = await m.detect(canvas, 20, MIN_SCORE);
-  const hit = preds.filter(p => DRINK_LABELS[p.class]).sort((a, b) => b.score - a.score)[0];
-  return hit ? { label: DRINK_LABELS[hit.class] } : { label: null };
-}
-
 async function takePhoto(e) {
   const file = e.target.files[0];
   e.target.value = "";
@@ -594,23 +573,6 @@ async function takePhoto(e) {
     $("review").hidden = false;
     $("result").className = "";
     $("result").textContent = "";
-
-    const send = $("send"), check = $("check");
-    send.disabled = true;
-    check.className = "";
-    check.textContent = model ? "Checking for your drink 🔍" : "Loading the drink checker 🔍 (first time takes a few seconds)";
-    const r = await findDrink(shrink(img, 640));
-    if (r.error) {
-      check.className = "no";
-      check.textContent = "The drink checker needs internet. Connect and retake.";
-    } else if (r.label) {
-      check.className = "ok";
-      check.textContent = `✅ Spotted a ${r.label}!`;
-      send.disabled = false;
-    } else {
-      check.className = "no";
-      check.textContent = "🚫 No drink spotted. Retake with your bottle or cup clearly in the shot.";
-    }
   } catch {
     $("result").className = "no";
     $("result").textContent = "That photo couldn't be read. Try again.";
