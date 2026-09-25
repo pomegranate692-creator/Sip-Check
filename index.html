@@ -89,6 +89,19 @@
   @keyframes fadeIn { from { opacity: 0; } }
   @keyframes fadeOut { to { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { #party *, #party { animation: none !important; } #rain { display: none; } }
+  #week { margin-bottom: 8px; }
+  .plot { position: relative; height: 140px; display: flex; align-items: flex-end; gap: 8px; margin-top: 10px; }
+  .plot .bar { flex: 1; border-radius: 8px 8px 4px 4px; min-height: 4px; transition: height .6s ease;
+    background: color-mix(in srgb, var(--water) 35%, transparent); }
+  .plot .bar.hit { background: var(--water); }
+  .plot .bar.today { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .goalLine { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--pebble); opacity: .7; pointer-events: none; }
+  .goalLine span { position: absolute; right: 0; top: -1.3em; font-size: .75rem; color: var(--pebble); }
+  .labels { display: flex; gap: 8px; margin-top: 6px; }
+  .labels div { flex: 1; text-align: center; font-size: .8rem; color: var(--pebble); line-height: 1.3; }
+  .labels div b { display: block; color: var(--ink); font-size: .95rem; }
+  .labels div.today { color: var(--ink); font-weight: 800; }
+  #weekVs { text-align: center; margin: 12px 0 4px; }
   details { background: var(--card); border-radius: 14px; padding: 12px 14px; }
   summary { cursor: pointer; font-weight: 500; }
   label.row { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
@@ -138,6 +151,18 @@
   <p class="sub" id="nextRemind" style="text-align:center"></p>
   <button class="snap alt" id="pushBtn" hidden>🔔 Turn on reminders</button>
   <p class="sub" id="pushNote" style="text-align:center" hidden></p>
+
+  <section id="week">
+    <h2>This week</h2>
+    <div class="plot" id="plot"><div class="goalLine" id="goalLine"><span id="goalTag"></span></div></div>
+    <div class="labels" id="labels"></div>
+    <p class="sub" id="weekVs"></p>
+    <div class="stats">
+      <div><b id="wTotal">0</b><span>drinks this week</span></div>
+      <div><b id="wGoals">0/7</b><span>goal days</span></div>
+      <div><b id="wBest">0</b><span>best streak</span></div>
+    </div>
+  </section>
 
   <section id="history">
     <h2>History</h2>
@@ -216,6 +241,53 @@ function streak() {
   return s;
 }
 
+function countsByDay() {
+  const c = {};
+  state.log.forEach(t => { const k = dayKey(t); c[k] = (c[k] || 0) + 1; });
+  return c;
+}
+function daysBack(n) {
+  const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n);
+  return d;
+}
+
+function renderWeek() {
+  const c = countsByDay();
+  const days = [...Array(7)].map((_, i) => daysBack(6 - i)); // oldest to today
+  const counts = days.map(d => c[dayKey(d)] || 0);
+  const lastWeek = [...Array(7)].reduce((n, _, i) => n + (c[dayKey(daysBack(7 + i))] || 0), 0);
+  const top = Math.max(state.goal, ...counts) * 1.15;
+
+  const plot = $("plot");
+  plot.querySelectorAll(".bar").forEach(b => b.remove());
+  $("labels").innerHTML = "";
+  days.forEach((d, i) => {
+    const bar = document.createElement("div");
+    bar.className = "bar" + (counts[i] >= state.goal ? " hit" : "") + (i === 6 ? " today" : "");
+    bar.style.height = (counts[i] / top * 100) + "%";
+    bar.title = `${counts[i]} drinks`;
+    plot.appendChild(bar);
+    const lab = document.createElement("div");
+    if (i === 6) lab.className = "today";
+    lab.innerHTML = `<b>${counts[i]}</b>${i === 6 ? "Today" : d.toLocaleDateString([], { weekday: "short" })}`;
+    $("labels").appendChild(lab);
+  });
+  $("goalLine").style.bottom = (state.goal / top * 100) + "%";
+  $("goalTag").textContent = `goal ${state.goal}`;
+
+  const total = counts.reduce((a, b) => a + b, 0);
+  state.best = Math.max(state.best || 0, streak());
+  $("wTotal").textContent = total;
+  $("wGoals").textContent = `${counts.filter(n => n >= state.goal).length}/7`;
+  $("wBest").textContent = state.best;
+
+  const diff = total - lastWeek;
+  $("weekVs").textContent = !lastWeek && !total ? "Your week starts with one sip 💧"
+    : diff > 0 ? `📈 ${diff} more than the week before. Let's go!`
+    : diff < 0 ? `📉 ${-diff} fewer than the week before. You got this 💪`
+    : "➡️ Same as the week before. Steady!";
+}
+
 function render() {
   const t = todays();
   $("date").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
@@ -228,6 +300,7 @@ function render() {
   const fill = Math.min(t.length / state.goal, 1) * 154; // 154 = inside height of the glass
   $("water").setAttribute("y", 162 - fill);
   $("water").setAttribute("height", fill);
+  renderWeek();
 }
 
 function shrink(img, max = 640) {
