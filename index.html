@@ -22,6 +22,7 @@
     :root { --bg: #081C2B; --ink: #DCEFF9; --card: #0F2A3F; --pebble: #8FA3B0; }
   }
   *, *::before, *::after { box-sizing: inherit; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; }
   body {
     background: var(--bg); color: var(--ink);
@@ -43,11 +44,13 @@
     font-size: 1.25rem; font-weight: 800; padding: 18px; border-radius: 999px;
     cursor: pointer; user-select: none;
   }
+  .snap.alt { background: transparent; color: var(--water); border: 3px solid var(--water); margin-top: 12px; padding: 15px; }
   .snap.off { opacity: .45; pointer-events: none; }
   .snap:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; }
-  #result { min-height: 1.5em; margin: 14px 4px; font-weight: 500; }
+  #result { min-height: 1.5em; margin: 14px 4px; font-weight: 500; font-size: 1.15rem; text-align: center; }
   #result.ok { color: var(--ok); } #result.no { color: var(--warn); }
-  #preview { width: 100%; border-radius: 14px; display: none; margin-bottom: 8px; }
+  #preview { width: 100%; border-radius: 14px; display: block; margin-bottom: 12px; }
+  button.snap { width: 100%; border: 0; font-family: inherit; }
 
   .stats { display: flex; gap: 12px; margin: 8px 0 20px; }
   .stats div { flex: 1; background: var(--card); border-radius: 14px; padding: 14px; }
@@ -56,6 +59,16 @@
 
   ul { list-style: none; padding: 0; margin: 0 0 20px; color: var(--pebble); }
   li { padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--pebble) 25%, transparent); }
+  h2 { font-size: 1.4rem; margin: 26px 0 6px; }
+  h3 { font-size: 1rem; font-weight: 500; color: var(--pebble); margin: 16px 0 8px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .grid button { position: relative; padding: 0; border: 0; border-radius: 10px; overflow: hidden; aspect-ratio: 1; background: var(--card); cursor: pointer; }
+  .grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .grid span { position: absolute; left: 6px; bottom: 5px; font: 500 .75rem inherit; color: #fff; text-shadow: 0 1px 3px #000a; }
+  #history { margin-bottom: 24px; }
+  #viewer { position: fixed; inset: 0; background: #000e; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; z-index: 10; cursor: pointer; }
+  #viewer img { max-width: 100%; max-height: 80%; border-radius: 14px; }
+  #viewer p { color: #fff; margin-top: 12px; }
   details { background: var(--card); border-radius: 14px; padding: 12px 14px; }
   summary { cursor: pointer; font-weight: 500; }
   label.row { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
@@ -76,35 +89,49 @@
     </svg>
     <div>
       <div class="count"><span id="today">0</span><small> / <span id="goalShow">8</span></small></div>
-      <div class="sub" style="margin:6px 0 0">glasses today</div>
+      <div class="sub" style="margin:6px 0 0">drinks today</div>
     </div>
   </div>
 
-  <img id="preview" alt="Your last photo">
-  <label class="snap off" id="snap">
-    <span id="snapText">Getting the camera check ready</span>
+  <label class="snap" id="snap">
+    📸 Snap your water
     <input type="file" accept="image/*" capture="environment" id="cam" hidden>
   </label>
+
+  <div id="review" hidden>
+    <img id="preview" alt="Your photo">
+    <button class="snap" id="send">Send it 💧</button>
+    <label class="snap alt">
+      Retake
+      <input type="file" accept="image/*" capture="environment" id="retake" hidden>
+    </label>
+  </div>
   <p id="result" role="status"></p>
 
   <div class="stats">
     <div><b id="streak">0</b><span>day streak</span></div>
-    <div><b id="last">None yet</b><span>last glass</span></div>
+    <div><b id="last">None yet</b><span>last drink</span></div>
   </div>
 
-  <ul id="log"></ul>
+  <section id="history">
+    <h2>History</h2>
+    <div id="days"><p class="sub">Your photos will show up here.</p></div>
+  </section>
+
+  <div id="viewer" hidden>
+    <img id="big" alt="">
+    <p id="bigTime"></p>
+  </div>
 
   <details>
     <summary>Settings</summary>
-    <label class="row">Daily goal (glasses)
+    <label class="row">Daily goal (drinks)
       <input type="number" id="goal" min="1" max="20">
     </label>
-    <button class="link" id="undo">Remove last glass</button>
+    <button class="link" id="undo">Remove last drink</button>
   </details>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <script>
 // ===== EDIT THESE =====
 const NTFY_TOPIC = "sipcheck-romaan-k82mz"; // make this random, it works like a password
@@ -113,11 +140,9 @@ const SEND_PHOTO = true;                        // false = text only, no photo a
 // ======================
 
 const KEY = "sipcheck.v1";
-const WATERY = ["cup", "bottle", "wine glass"]; // things the model can spot
 const $ = id => document.getElementById(id);
 
 let state = load();
-let model = null;
 
 function load() {
   try { return JSON.parse(localStorage.getItem(KEY)) || { goal: 8, log: [] }; }
@@ -151,7 +176,6 @@ function render() {
   $("goal").value = state.goal;
   $("streak").textContent = streak();
   $("last").textContent = t.length ? timeStr(t[t.length - 1]) : "None yet";
-  $("log").innerHTML = t.slice().reverse().map(x => `<li>Glass at ${timeStr(x)}</li>`).join("");
 
   const fill = Math.min(t.length / state.goal, 1) * 154; // 154 = inside height of the glass
   $("water").setAttribute("y", 162 - fill);
@@ -159,10 +183,10 @@ function render() {
 }
 
 function shrink(img, max = 640) {
-  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const scale = Math.min(1, max / Math.max((img.naturalWidth || img.width), (img.naturalHeight || img.height)));
   const c = document.createElement("canvas");
-  c.width = Math.round(img.naturalWidth * scale);
-  c.height = Math.round(img.naturalHeight * scale);
+  c.width = Math.round((img.naturalWidth || img.width) * scale);
+  c.height = Math.round((img.naturalHeight || img.height) * scale);
   c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
   return c;
 }
@@ -171,7 +195,7 @@ async function notify(canvas) {
   const n = todays().length;
   const headers = {
     "Title": "Sip Check",
-    "Message": `${FRIEND_NAME} logged glass ${n} of ${state.goal} at ${timeStr(Date.now())}`,
+    "Message": `${FRIEND_NAME} logged drink ${n} of ${state.goal} at ${timeStr(Date.now())}`,
     "Tags": "droplet"
   };
   try {
@@ -182,39 +206,141 @@ async function notify(canvas) {
     } else {
       await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, { method: "POST", body: headers.Message, headers: { Title: headers.Title, Tags: headers.Tags } });
     }
-  } catch { /* no signal? the glass still counts */ }
+    return true;
+  } catch { return false; }
 }
 
-$("cam").addEventListener("change", async e => {
+const SAYINGS = [
+  "Hydration station: fully operational. 💧",
+  "Your kidneys just sent you a thank you card.",
+  "Look at you, thriving like a well watered houseplant. 🪴",
+  "Certified hydrated. The Hydro Flask is proud.",
+  "One sip closer to glowing. ✨",
+  "Your cells are doing a little happy dance right now.",
+  "Water you doing? Winning, apparently.",
+  "Absolute legend behavior.",
+  "Somewhere out there, a camel is jealous. 🐪",
+  "Hydrated and dangerous.",
+  "You're making every other water bottle look bad.",
+  "Sip sip hooray! 🎉",
+  "Your skin just whispered thank you.",
+  "Main character hydration arc. Keep it going.",
+  "The ocean called. It says you're doing amazing. 🌊",
+  "Keep this up and you'll turn into a mermaid. 🧜‍♀️",
+  "That's the good stuff. Literally, it's water.",
+  "H2Oh yeah.",
+  "Plants wish they had your discipline.",
+  "Level up! +10 hydration. 🎮",
+  "Future you is high fiving you right now. 🙌",
+  "Hydration queen, as usual. 👑",
+  "Another one! Don't let that streak dry up.",
+  "Not all heroes wear capes. Some carry Hydro Flasks. 🦸‍♀️",
+  "Drip check: passed. 💧",
+  "You're on a roll. A wet, healthy roll.",
+  "Your brain just got a tiny bit sharper. That's science. 🧠",
+  "Dehydration could never.",
+  "Olympic level water drinking. Gold medal. 🥇",
+  "Moisturized. Unbothered. Iconic. 💅"
+];
+let bag = [];
+function nextSaying() {
+  if (!bag.length) bag = SAYINGS.map((_, i) => i).sort(() => Math.random() - 0.5); // no repeats until all 30 are used
+  return SAYINGS[bag.pop()];
+}
+
+let photo = null;
+
+// photos live in IndexedDB on her phone (too big for localStorage)
+const dbReady = new Promise((res, rej) => {
+  const r = indexedDB.open("sipcheck", 1);
+  r.onupgradeneeded = () => r.result.createObjectStore("photos", { keyPath: "t" });
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+async function tx(mode, fn) {
+  const db = await dbReady;
+  return new Promise((res, rej) => {
+    const t = db.transaction("photos", mode);
+    const out = fn(t.objectStore("photos"));
+    t.oncomplete = () => res(out && out.result);
+    t.onerror = () => rej(t.error);
+  });
+}
+const savePhoto = (t, blob) => tx("readwrite", st => st.put({ t, blob })).catch(() => {});
+const deletePhoto = t => tx("readwrite", st => st.delete(t)).catch(() => {});
+const allPhotos = () => tx("readonly", st => st.getAll()).catch(() => []);
+
+let urls = [];
+async function renderHistory() {
+  const photos = (await allPhotos()) || [];
+  urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
+  if (!photos.length) return;
+  photos.sort((a, b) => b.t - a.t);
+  const byDay = {};
+  photos.forEach(p => (byDay[dayKey(p.t)] ||= []).push(p));
+  const box = $("days");
+  box.innerHTML = "";
+  for (const k of Object.keys(byDay)) {
+    const h = document.createElement("h3");
+    h.textContent = new Date(byDay[k][0].t).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" }) + `  (${byDay[k].length})`;
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    for (const p of byDay[k]) {
+      const u = URL.createObjectURL(p.blob); urls.push(u);
+      const b = document.createElement("button");
+      b.innerHTML = `<img src="${u}" alt="Drink at ${timeStr(p.t)}"><span>${timeStr(p.t)}</span>`;
+      b.onclick = () => {
+        $("big").src = u;
+        $("bigTime").textContent = new Date(p.t).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+        $("viewer").hidden = false;
+      };
+      grid.appendChild(b);
+    }
+    box.append(h, grid);
+  }
+}
+$("viewer").addEventListener("click", () => $("viewer").hidden = true);
+
+async function takePhoto(e) {
   const file = e.target.files[0];
   e.target.value = "";
-  if (!file || !model) return;
-
+  if (!file) return;
   const img = $("preview");
   img.src = URL.createObjectURL(file);
-  img.style.display = "block";
-  $("result").className = "";
-  $("result").textContent = "Checking your photo";
-
   try {
     await img.decode();
-    const small = shrink(img);
-    const preds = await model.detect(small);
-    const hit = preds.find(p => WATERY.includes(p.class) && p.score > 0.4);
-    if (hit) {
-      state.log.push(Date.now());
-      save(); render();
-      notify(small);
-      $("result").className = "ok";
-      $("result").textContent = `Logged. Spotted a ${hit.class}. 💧`;
-    } else {
-      $("result").className = "no";
-      $("result").textContent = "No cup, glass or bottle spotted. Hold it closer and snap again.";
-    }
+    photo = shrink(img, 1024);
+    $("snap").hidden = true;
+    $("review").hidden = false;
+    $("result").className = "";
+    $("result").textContent = "";
   } catch {
     $("result").className = "no";
-    $("result").textContent = "That photo couldn't be read. Snap again.";
+    $("result").textContent = "That photo couldn't be read. Try again.";
   }
+}
+
+$("cam").addEventListener("change", takePhoto);
+$("retake").addEventListener("change", takePhoto);
+
+$("send").addEventListener("click", async () => {
+  if (!photo) return;
+  $("send").disabled = true;
+  $("send").textContent = "Sending";
+  const t = Date.now();
+  state.log.push(t);
+  save(); render();
+  const thumb = await new Promise(r => shrink(photo, 600).toBlob(r, "image/jpeg", 0.75));
+  await savePhoto(t, thumb);
+  renderHistory();
+  const ok = await notify(photo);
+  $("result").className = ok ? "ok" : "no";
+  $("result").textContent = ok ? nextSaying() : "Logged, but it didn't send. Check your signal.";
+  photo = null;
+  $("review").hidden = true;
+  $("snap").hidden = false;
+  $("send").disabled = false;
+  $("send").textContent = "Send it 💧";
 });
 
 $("goal").addEventListener("change", e => {
@@ -223,19 +349,12 @@ $("goal").addEventListener("change", e => {
 });
 $("undo").addEventListener("click", () => {
   if (!todays().length) return;
-  state.log.pop(); save(); render();
+  const t = state.log.pop(); save(); render();
+  deletePhoto(t).then(renderHistory);
 });
 
 render();
-cocoSsd.load({ base: "lite_mobilenet_v2" })
-  .then(m => {
-    model = m;
-    $("snap").classList.remove("off");
-    $("snapText").textContent = "📸 Snap your water";
-  })
-  .catch(() => {
-    $("snapText").textContent = "Camera check needs internet. Reopen the app.";
-  });
+renderHistory();
 </script>
 </body>
 </html>
