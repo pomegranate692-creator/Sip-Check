@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Sip Check">
 <title>Sip Check</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-512.png">
+<meta name="theme-color" content="#3FA7D6">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&display=swap" rel="stylesheet">
 <style>
@@ -133,6 +136,8 @@
   </div>
 
   <p class="sub" id="nextRemind" style="text-align:center"></p>
+  <button class="snap alt" id="pushBtn" hidden>🔔 Turn on reminders</button>
+  <p class="sub" id="pushNote" style="text-align:center" hidden></p>
 
   <section id="history">
     <h2>History</h2>
@@ -177,7 +182,9 @@
 const NTFY_TOPIC = "sipcheck-romaan-k82mz"; // make this random, it works like a password
 const FRIEND_NAME = "Saira";                       // shows up in your notification
 const SEND_PHOTO = true;                        // false = text only, no photo attached
-const REMIND_TOPIC = "sipcheck-saira-7kcjqi";   // SAIRA subscribes to this one in ntfy (not you)
+const WORKER_URL = "https://sipcheck.pomegranate692.workers.dev";   // from Cloudflare, like https://sipcheck.yourname.workers.dev
+const APP_KEY = "NTmxYglJBzcU7e2rZrPlMJI3";
+const VAPID_PUBLIC = "BEf3pX7erDQYSz1fyJGDx51gGf5K40lzkukwU2x3dpgxYZtphbtklWMsb3wBTcRwrVILg5Vk4ICA8xiIGmYG-N4";
 // ======================
 
 const KEY = "sipcheck.v1";
@@ -381,39 +388,90 @@ function nextWake(after) {
   return d.getTime();
 }
 
-function publishAt(id, t, [title, msg]) {
-  return fetch(`https://ntfy.sh/${REMIND_TOPIC}/${id}`, {
-    method: "POST",
-    body: msg,
-    headers: { "Title": title, "Tags": "droplet", "At": String(Math.floor(t / 1000)) }
-  }).catch(() => {});
-}
-const cancel = id => fetch(`https://ntfy.sh/${REMIND_TOPIC}/${id}/delete`).catch(() => {});
+const post = (path, data) => fetch(WORKER_URL + path, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ key: APP_KEY, ...data })
+});
 
 async function scheduleReminders() {
   const r = R();
-  if (!r.on) {
-    ["nudge-1", "nudge-2", "nudge-3", "morning"].forEach(cancel);
-    state.nextAt = null; save(); showNext();
-    return;
+  const times = [];
+  if (r.on) {
+    const now = Date.now();
+    let t1 = now + r.every * 60000;
+    if (isQuiet(t1)) t1 = nextWake(t1);
+    const t2 = t1 + 45 * 60000;
+    const t3 = t2 + 60 * 60000;
+    times.push({ t: t1, title: NUDGES[0][0], body: NUDGES[0][1] });
+    let last = t1;
+    if (!isQuiet(t2)) { times.push({ t: t2, title: NUDGES[1][0], body: NUDGES[1][1] }); last = t2; }
+    if (!isQuiet(t2) && !isQuiet(t3)) { times.push({ t: t3, title: NUDGES[2][0], body: NUDGES[2][1] }); last = t3; }
+    const m = nextWake(last + 60000); // safety net so the chain never dies
+    times.push({ t: m, title: NUDGES[3][0], body: NUDGES[3][1] });
+    state.nextAt = t1;
+  } else {
+    state.nextAt = null;
   }
-  const now = Date.now();
-  let t1 = now + r.every * 60000;
-  if (isQuiet(t1)) t1 = nextWake(t1);
-  const t2 = t1 + 45 * 60000;
-  const t3 = t2 + 60 * 60000;
+  save(); showNext();
+  if (state.pushOn) { try { await post("/schedule", { times }); } catch {} }
+}
 
-  await publishAt("nudge-1", t1, NUDGES[0]);
-  let last = t1;
-  if (!isQuiet(t2)) { await publishAt("nudge-2", t2, NUDGES[1]); last = t2; } else cancel("nudge-2");
-  if (!isQuiet(t2) && !isQuiet(t3)) { await publishAt("nudge-3", t3, NUDGES[2]); last = t3; } else cancel("nudge-3");
-  await publishAt("morning", nextWake(last + 60000), NUDGES[3]); // safety net so the chain never dies
+// ===== phone notifications (Web Push) =====
+const b64uToBytes = str => {
+  const s = str.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((str.length + 3) % 4);
+  return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+};
+const isHomeScreenApp = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
-  state.nextAt = t1; save(); showNext();
+function showPushUI() {
+  const btn = $("pushBtn"), note = $("pushNote");
+  btn.hidden = true; note.hidden = true;
+  if (state.pushOn && Notification.permission === "granted") return;
+  if (!isHomeScreenApp()) { note.hidden = false; note.textContent = "📲 Open Sip Check from your home screen icon to turn on reminders"; return; }
+  if (!pushSupported()) { note.hidden = false; note.textContent = "Update your iPhone to turn on reminders"; return; }
+  btn.hidden = false;
+}
+
+async function enablePush() {
+  const btn = $("pushBtn");
+  btn.disabled = true; btn.textContent = "Turning on";
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("Notifications are blocked. Turn them on in iPhone Settings, then Notifications, then Sip Check.");
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) ||
+      await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(VAPID_PUBLIC) });
+    const res = await post("/subscribe", { sub: sub.toJSON() });
+    if (!res.ok) throw new Error("Couldn't reach the reminder server.");
+    state.pushOn = true; save();
+    await scheduleReminders();
+    post("/test", {}).catch(() => {});
+    $("result").className = "ok";
+    $("result").textContent = "Reminders are on 🔔 A test one is on its way!";
+  } catch (err) {
+    $("result").className = "no";
+    $("result").textContent = err.message || "Something went wrong. Try again.";
+  }
+  btn.disabled = false; btn.textContent = "🔔 Turn on reminders";
+  showPushUI();
+}
+
+// keeps the server's copy of the subscription fresh every time she opens the app
+async function refreshPush() {
+  if (!state.pushOn || !pushSupported() || Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) post("/subscribe", { sub: sub.toJSON() });
+    else { state.pushOn = false; save(); showPushUI(); }
+  } catch {}
 }
 
 function showNext() {
   const el = $("nextRemind");
+  if (!state.pushOn) { el.textContent = ""; return; }
   if (!R().on) { el.textContent = "Reminders are off"; return; }
   if (!state.nextAt || state.nextAt < Date.now()) { el.textContent = "⏰ Log a drink to start your reminders"; return; }
   const d = new Date(state.nextAt);
@@ -561,6 +619,10 @@ render();
 renderHistory();
 setupReminderSettings();
 setInterval(showNext, 60000);
+$("pushBtn").addEventListener("click", enablePush);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+showPushUI();
+refreshPush();
 </script>
 </body>
 </html>
