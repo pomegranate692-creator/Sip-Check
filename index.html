@@ -89,6 +89,8 @@
   details { background: var(--card); border-radius: 14px; padding: 12px 14px; }
   summary { cursor: pointer; font-weight: 500; }
   label.row { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+  select { font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--pebble); background: transparent; color: var(--ink); }
+  input[type=checkbox] { width: 22px; height: 22px; }
   input[type=number] { width: 70px; font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--pebble); background: transparent; color: var(--ink); }
   button.link { background: none; border: 0; color: var(--warn); font: inherit; padding: 12px 0 0; cursor: pointer; }
 </style>
@@ -130,6 +132,8 @@
     <div><b id="last">None yet</b><span>last drink</span></div>
   </div>
 
+  <p class="sub" id="nextRemind" style="text-align:center"></p>
+
   <section id="history">
     <h2>History</h2>
     <div id="days"><p class="sub">Your photos will show up here.</p></div>
@@ -152,6 +156,18 @@
     <label class="row">Daily goal (drinks)
       <input type="number" id="goal" min="1" max="20">
     </label>
+    <label class="row">Reminders
+      <input type="checkbox" id="rOn">
+    </label>
+    <label class="row">Remind me every
+      <select id="rEvery"><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option></select>
+    </label>
+    <label class="row">I wake up at
+      <select id="rWake"></select>
+    </label>
+    <label class="row">I go to bed at
+      <select id="rSleep"></select>
+    </label>
     <button class="link" id="undo">Remove last drink</button>
   </details>
 </main>
@@ -161,6 +177,7 @@
 const NTFY_TOPIC = "sipcheck-romaan-k82mz"; // make this random, it works like a password
 const FRIEND_NAME = "Saira";                       // shows up in your notification
 const SEND_PHOTO = true;                        // false = text only, no photo attached
+const REMIND_TOPIC = "sipcheck-saira-7kcjqi";   // SAIRA subscribes to this one in ntfy (not you)
 // ======================
 
 const KEY = "sipcheck.v1";
@@ -340,6 +357,98 @@ function closeParty() {
 }
 $("party").addEventListener("click", closeParty);
 
+// ===== reminders =====
+// Each drink reschedules the SAME 4 ntfy messages (same IDs), so old ones get replaced, never doubled up.
+// nudge-1: every X after her last drink, nudge-2 and 3: follow ups if she ignores it, morning: next wake up
+const R_DEFAULT = { on: true, every: 90, wake: 8, sleep: 22 };
+const R = () => (state.remind ||= { ...R_DEFAULT });
+
+const NUDGES = [
+  ["Sip time 💧", "Grab the Hydro Flask and open Sip Check 🥤✨"],
+  ["Still waiting on that sip 👀💧", "Your water misses you. Open Sip Check 🥺"],
+  ["Last call for this round 🚰", "Your kidneys are asking nicely 🙏💙"],
+  ["Good morning ☀️💧", "Start the day with some water. Open Sip Check 🌅"]
+];
+
+function isQuiet(t) {
+  const d = new Date(t), h = d.getHours() + d.getMinutes() / 60, r = R();
+  return r.sleep > r.wake ? (h >= r.sleep || h < r.wake) : (h >= r.sleep && h < r.wake);
+}
+function nextWake(after) {
+  const d = new Date(after);
+  d.setHours(R().wake, 0, 0, 0);
+  if (d.getTime() <= after) d.setDate(d.getDate() + 1);
+  return d.getTime();
+}
+
+function publishAt(id, t, [title, msg]) {
+  return fetch(`https://ntfy.sh/${REMIND_TOPIC}/${id}`, {
+    method: "POST",
+    body: msg,
+    headers: { "Title": title, "Tags": "droplet", "At": String(Math.floor(t / 1000)) }
+  }).catch(() => {});
+}
+const cancel = id => fetch(`https://ntfy.sh/${REMIND_TOPIC}/${id}/delete`).catch(() => {});
+
+async function scheduleReminders() {
+  const r = R();
+  if (!r.on) {
+    ["nudge-1", "nudge-2", "nudge-3", "morning"].forEach(cancel);
+    state.nextAt = null; save(); showNext();
+    return;
+  }
+  const now = Date.now();
+  let t1 = now + r.every * 60000;
+  if (isQuiet(t1)) t1 = nextWake(t1);
+  const t2 = t1 + 45 * 60000;
+  const t3 = t2 + 60 * 60000;
+
+  await publishAt("nudge-1", t1, NUDGES[0]);
+  let last = t1;
+  if (!isQuiet(t2)) { await publishAt("nudge-2", t2, NUDGES[1]); last = t2; } else cancel("nudge-2");
+  if (!isQuiet(t2) && !isQuiet(t3)) { await publishAt("nudge-3", t3, NUDGES[2]); last = t3; } else cancel("nudge-3");
+  await publishAt("morning", nextWake(last + 60000), NUDGES[3]); // safety net so the chain never dies
+
+  state.nextAt = t1; save(); showNext();
+}
+
+function showNext() {
+  const el = $("nextRemind");
+  if (!R().on) { el.textContent = "Reminders are off"; return; }
+  if (!state.nextAt || state.nextAt < Date.now()) { el.textContent = "⏰ Log a drink to start your reminders"; return; }
+  const d = new Date(state.nextAt);
+  const sameDay = dayKey(d) === dayKey(Date.now());
+  el.textContent = `⏰ Next reminder ${sameDay ? "" : "tomorrow "}at ${timeStr(d)}`;
+}
+
+function hourOptions(sel, val) {
+  sel.innerHTML = "";
+  for (let h = 0; h < 24; h++) {
+    const o = document.createElement("option");
+    o.value = h;
+    o.textContent = new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" });
+    if (h === val) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+function setupReminderSettings() {
+  const r = R();
+  $("rOn").checked = r.on;
+  $("rEvery").value = String(r.every);
+  hourOptions($("rWake"), r.wake);
+  hourOptions($("rSleep"), r.sleep);
+  const changed = () => {
+    r.on = $("rOn").checked;
+    r.every = parseInt($("rEvery").value);
+    r.wake = parseInt($("rWake").value);
+    r.sleep = parseInt($("rSleep").value);
+    save();
+    scheduleReminders();
+  };
+  ["rOn", "rEvery", "rWake", "rSleep"].forEach(id => $(id).addEventListener("change", changed));
+  showNext();
+}
+
 let photo = null;
 
 // photos live in IndexedDB on her phone (too big for localStorage)
@@ -426,6 +535,7 @@ $("send").addEventListener("click", async () => {
   await savePhoto(t, thumb);
   renderHistory();
   const ok = await notify(photo);
+  scheduleReminders();
   $("result").className = ok ? "ok" : "no";
   const line = todays().length === state.goal ? "DAILY GOAL SMASHED 🏆🎉💧 You did it!" : nextSaying();
   $("result").textContent = ok ? line : "Logged, but it didn't send. Check your signal.";
@@ -449,6 +559,8 @@ $("undo").addEventListener("click", () => {
 
 render();
 renderHistory();
+setupReminderSettings();
+setInterval(showNext, 60000);
 </script>
 </body>
 </html>
