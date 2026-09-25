@@ -69,6 +69,23 @@
   #viewer { position: fixed; inset: 0; background: #000e; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; z-index: 10; cursor: pointer; }
   #viewer img { max-width: 100%; max-height: 80%; border-radius: 14px; }
   #viewer p { color: #fff; margin-top: 12px; }
+  #party { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; overflow: hidden; cursor: pointer;
+    background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--water) 55%, var(--bg)), var(--bg) 75%);
+    animation: fadeIn .25s ease-out; }
+  #party.out { animation: fadeOut .35s ease-in forwards; }
+  #star { width: 180px; height: 200px; display: flex; align-items: center; justify-content: center; animation: pop .5s cubic-bezier(.3,1.6,.5,1) both; }
+  #star img { max-width: 240px; max-height: 240px; border-radius: 18px; }
+  #star svg { width: 150px; animation: hop .55s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+  #partyText { font-size: 1.6rem; font-weight: 800; line-height: 1.25; max-width: 340px; margin: 26px 0 8px; animation: rise .5s .15s ease-out both; }
+  #partyHint { color: var(--pebble); font-size: .85rem; margin: 0; }
+  #rain span { position: absolute; top: -10vh; font-size: 1.8rem; animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(120vh) rotate(var(--spin)); } }
+  @keyframes hop { from { transform: translateY(0) scale(1.06, .94); } to { transform: translateY(-26px) scale(.96, 1.05); } }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  @keyframes fadeIn { from { opacity: 0; } }
+  @keyframes fadeOut { to { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { #party *, #party { animation: none !important; } #rain { display: none; } }
   details { background: var(--card); border-radius: 14px; padding: 12px 14px; }
   summary { cursor: pointer; font-weight: 500; }
   label.row { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
@@ -117,6 +134,13 @@
     <h2>History</h2>
     <div id="days"><p class="sub">Your photos will show up here.</p></div>
   </section>
+
+  <div id="party" hidden>
+    <div id="rain" aria-hidden="true"></div>
+    <div id="star"></div>
+    <p id="partyText"></p>
+    <p id="partyHint">Tap anywhere to close</p>
+  </div>
 
   <div id="viewer" hidden>
     <img id="big" alt="">
@@ -211,42 +235,110 @@ async function notify(canvas) {
 }
 
 const SAYINGS = [
-  "Hydration station: fully operational. 💧",
-  "Your kidneys just sent you a thank you card.",
-  "Look at you, thriving like a well watered houseplant. 🪴",
-  "Certified hydrated. The Hydro Flask is proud.",
-  "One sip closer to glowing. ✨",
-  "Your cells are doing a little happy dance right now.",
-  "Water you doing? Winning, apparently.",
-  "Absolute legend behavior.",
-  "Somewhere out there, a camel is jealous. 🐪",
-  "Hydrated and dangerous.",
-  "You're making every other water bottle look bad.",
-  "Sip sip hooray! 🎉",
-  "Your skin just whispered thank you.",
-  "Main character hydration arc. Keep it going.",
-  "The ocean called. It says you're doing amazing. 🌊",
-  "Keep this up and you'll turn into a mermaid. 🧜‍♀️",
-  "That's the good stuff. Literally, it's water.",
-  "H2Oh yeah.",
-  "Plants wish they had your discipline.",
-  "Level up! +10 hydration. 🎮",
-  "Future you is high fiving you right now. 🙌",
-  "Hydration queen, as usual. 👑",
-  "Another one! Don't let that streak dry up.",
-  "Not all heroes wear capes. Some carry Hydro Flasks. 🦸‍♀️",
-  "Drip check: passed. 💧",
-  "You're on a roll. A wet, healthy roll.",
-  "Your brain just got a tiny bit sharper. That's science. 🧠",
-  "Dehydration could never.",
-  "Olympic level water drinking. Gold medal. 🥇",
-  "Moisturized. Unbothered. Iconic. 💅"
+  "Hydration station: fully operational 🚰💧✅",
+  "Your kidneys just sent you a thank you card 💌🫶",
+  "Look at you, thriving like a well watered houseplant 🪴🌞",
+  "Certified hydrated 📜✅ The Hydro Flask is proud 🥹",
+  "One sip closer to glowing ✨🌟💧",
+  "Your cells are doing a little happy dance right now 💃🕺🎶",
+  "Water you doing? 🤔 Winning, apparently 🏆",
+  "Absolute legend behavior 😤🔥",
+  "Somewhere out there, a camel is jealous 🐪😒",
+  "Hydrated and dangerous 😎💦",
+  "You're making every other water bottle look bad 💅🥤",
+  "Sip sip hooray! 🎉🥳🎊",
+  "Your skin just whispered thank you ✨🧴😌",
+  "Main character hydration arc 🎬🌊 Keep it going",
+  "The ocean called 📞🌊 It says you're doing amazing",
+  "Keep this up and you'll turn into a mermaid 🧜‍♀️🐚",
+  "That's the good stuff 😋 Literally, it's water 💧",
+  "H2Oh yeah 😏💦",
+  "Plants wish they had your discipline 🌱👀",
+  "Level up! +10 hydration 🎮⬆️💧",
+  "Future you is high fiving you right now 🙌⏳",
+  "Hydration queen, as usual 👑💧✨",
+  "Another one! 🔁 Don't let that streak dry up 🔥",
+  "Not all heroes wear capes 🦸‍♀️ Some carry Hydro Flasks 💪",
+  "Drip check: passed 💧✅😎",
+  "You're on a roll 🌀 A wet, healthy roll 💦",
+  "Your brain just got a tiny bit sharper 🧠⚡ That's science 🔬",
+  "Dehydration could never 🙅‍♀️🏜️",
+  "Olympic level water drinking 🥇🏊‍♀️",
+  "Moisturized. Unbothered. Iconic. 💅💧👑"
+];
+
+// OPTIONAL: paste GIF links here and one shows up at random on each send.
+// On giphy.com: open a GIF, tap Share, then "Copy GIF Link". Example format:
+// "https://media.giphy.com/media/XXXXXXXX/giphy.gif",
+// Leave it empty to use the dancing water drop instead.
+const GIFS = [
 ];
 let bag = [];
 function nextSaying() {
   if (!bag.length) bag = SAYINGS.map((_, i) => i).sort(() => Math.random() - 0.5); // no repeats until all 30 are used
   return SAYINGS[bag.pop()];
 }
+
+// the dancing water drop, with a random outfit each time
+function dropSVG() {
+  const face = `
+    <circle cx="44" cy="98" r="6" fill="#0E3B5C"/><circle cx="76" cy="98" r="6" fill="#0E3B5C"/>
+    <circle cx="46" cy="96" r="2" fill="#fff"/><circle cx="78" cy="96" r="2" fill="#fff"/>`;
+  const extras = [
+    face,
+    `<rect x="30" y="88" width="26" height="16" rx="6" fill="#111"/><rect x="64" y="88" width="26" height="16" rx="6" fill="#111"/><rect x="54" y="92" width="12" height="4" fill="#111"/>`,
+    `<text x="44" y="106" font-size="20" text-anchor="middle">❤️</text><text x="76" y="106" font-size="20" text-anchor="middle">❤️</text>`,
+    face + `<text x="60" y="26" font-size="34" text-anchor="middle">👑</text>`,
+    face + `<text x="60" y="24" font-size="32" text-anchor="middle">🥳</text>`,
+    `<text x="44" y="106" font-size="20" text-anchor="middle">⭐</text><text x="76" y="106" font-size="20" text-anchor="middle">⭐</text>`
+  ];
+  const pick = extras[Math.floor(Math.random() * extras.length)];
+  return `<svg viewBox="0 0 120 150" aria-hidden="true">
+    <path d="M60 8 C60 8 14 66 14 98 a46 46 0 0 0 92 0 C106 66 60 8 60 8Z" fill="#3FA7D6" stroke="#0E3B5C" stroke-width="4"/>
+    <ellipse cx="36" cy="80" rx="7" ry="14" fill="#fff" opacity=".45"/>
+    <circle cx="34" cy="116" r="6" fill="#FF8FAB" opacity=".7"/><circle cx="86" cy="116" r="6" fill="#FF8FAB" opacity=".7"/>
+    <path d="M46 116 Q60 132 74 116" fill="none" stroke="#0E3B5C" stroke-width="4" stroke-linecap="round"/>
+    ${pick}
+  </svg>`;
+}
+
+let partyTimer = null;
+function celebrate(text) {
+  const party = $("party");
+  const star = $("star");
+  if (GIFS.length) {
+    star.innerHTML = `<img src="${GIFS[Math.floor(Math.random() * GIFS.length)]}" alt="">`;
+    star.querySelector("img").onerror = () => star.innerHTML = dropSVG(); // bad link? show the drop
+  } else {
+    star.innerHTML = dropSVG();
+  }
+  $("partyText").textContent = text;
+
+  const rain = $("rain");
+  rain.innerHTML = "";
+  const bits = ["💧", "💦", "✨", "🎉", "💙", "🫧"];
+  for (let i = 0; i < 36; i++) {
+    const b = document.createElement("span");
+    b.textContent = bits[i % bits.length];
+    b.style.left = Math.random() * 100 + "vw";
+    b.style.animationDuration = 2 + Math.random() * 2 + "s";
+    b.style.animationDelay = Math.random() * 1.2 + "s";
+    b.style.setProperty("--spin", (Math.random() * 720 - 360) + "deg");
+    rain.appendChild(b);
+  }
+
+  party.classList.remove("out");
+  party.hidden = false;
+  clearTimeout(partyTimer);
+  partyTimer = setTimeout(closeParty, 4500);
+}
+function closeParty() {
+  const party = $("party");
+  if (party.hidden) return;
+  party.classList.add("out");
+  setTimeout(() => { party.hidden = true; party.classList.remove("out"); }, 350);
+}
+$("party").addEventListener("click", closeParty);
 
 let photo = null;
 
@@ -335,7 +427,9 @@ $("send").addEventListener("click", async () => {
   renderHistory();
   const ok = await notify(photo);
   $("result").className = ok ? "ok" : "no";
-  $("result").textContent = ok ? nextSaying() : "Logged, but it didn't send. Check your signal.";
+  const line = todays().length === state.goal ? "DAILY GOAL SMASHED 🏆🎉💧 You did it!" : nextSaying();
+  $("result").textContent = ok ? line : "Logged, but it didn't send. Check your signal.";
+  if (ok) celebrate(line);
   photo = null;
   $("review").hidden = true;
   $("snap").hidden = false;
